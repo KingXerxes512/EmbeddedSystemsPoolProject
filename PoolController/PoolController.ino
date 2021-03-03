@@ -18,13 +18,13 @@ Data data;
 
 
 // Defines
-String S_SSID = "OCguest";
-String S_PASS = "";
-String FIREBASE_ADDR = "https://es-pool-controller-default-rtdb.firebaseio.com/"; // firebase database url
-String FIREBASE_SECRET = "YXsdNJ9OFISN2ZwgUhIQxny6KDtDgdMdm9Ho6HWL"; // database secret code
-
 char C_SSID[100] = "OCguest";
 char C_PASS[100] = {NULL};
+
+String S_SSID = C_SSID;
+String S_PASS = C_PASS;
+String FIREBASE_ADDR = "https://es-pool-controller-default-rtdb.firebaseio.com/"; // firebase database url
+String FIREBASE_SECRET = "YXsdNJ9OFISN2ZwgUhIQxny6KDtDgdMdm9Ho6HWL"; // database secret code
 
 int wifiStatus;
 
