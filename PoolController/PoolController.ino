@@ -4,7 +4,7 @@
 
 FirebaseData firebaseData;
 
-struct Data
+struct Data // struct to contain a copy of the database values
 {
   int Heater_Running = 0; // Relay 1
   int Pump_Running = 0;   // Relay 2
@@ -55,12 +55,13 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   Firebase.begin(FIREBASE_ADDR, FIREBASE_SECRET, S_SSID, S_PASS); // Connect to firebase
+  Firebase.reconnectWiFi(true);
 
   // Wifi & Firebase should be connected
   // -------------------------------------------------------------
 
   // -------------------------------------------------------------
-  // Setup Pins
+  // Setup Pins regarding any pull-up nature or pull-down nature they require
   
   
   
