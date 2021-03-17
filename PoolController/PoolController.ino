@@ -3,6 +3,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Keypad.h>
+#include <Wire.h>
+#include <DHT.h>
 #include "Firebase_Arduino_WiFiNINA.h"
 #include "Firebase_Arduino_WiFiNINA_HTTPCLient.h"
 
@@ -15,9 +17,14 @@ struct Data // struct to contain a copy of the database values
   float AirTemp = 0.0;          // Air Temp Probe
   float WaterTemp = 0.0;        // Water Temp Probe
   float pH = 7.0;               // pH Temp Probe
-  float WaterLevel = 0.0;       // Water Level Probe
+  bool WaterLevel = 0;       // Water Level Probe
 };
 Data data;
+
+// Current Sensor Values
+float AirTemp = 0.0;
+float WaterTemp = 0.0;
+float pH = 7.0;
 
 const byte ROWS = 4; 
 const byte COLS = 4; 
@@ -37,6 +44,8 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 
 // PIN DEFINITIONS
 #define WATER_SENS_PROBE_DATA 2
+#define AIR_TEMP_PROBE_DATA 12
+#define DHTTYPE DHT22   // DHT22
 #define KEYPAD_R1 3
 #define KEYPAD_R2 4
 #define KEYPAD_R3 5
@@ -47,15 +56,19 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 #define KEYPAD_C4 10
 
 // Defines
-#define WIFI_SSID "Josiah's S20+"
-#define WIFI_PASS "7205858843"
+//#define WIFI_SSID "Josiah's S20+"
+//#define WIFI_PASS "7205858843"
 //#define WIFI_SSID "Luke's iPhone"
 //#define WIFI_PASS "mynamejeff"
+#define WIFI_SSID "OCguest"
+#define WIFI_PASS ""
 #define FIREBASE_HOST "es-pool-controller-default-rtdb.firebaseio.com"
 #define FIREBASE_AUTH "YXsdNJ9OFISN2ZwgUhIQxny6KDtDgdMdm9Ho6HWL"
 
-  OneWire oneWire(WATER_SENS_PROBE_DATA);
-  DallasTemperature sensors(&oneWire);
+  OneWire WaterTempSense(WATER_SENS_PROBE_DATA);
+  DallasTemperature WaterTempSensor(&WaterTempSense);
+
+  DHT AirTempSensor(AIR_TEMP_PROBE_DATA, DHTTYPE);
 
 // functions to turn on or off the builtin LED
   void LEDOn() {
@@ -78,6 +91,26 @@ void SetupWifiConnection() {
   }
 }
 
+void GetFirebaseValues() {
+  // Pull Heater
+  
+
+  // Pull Filter / Pump
+  
+
+  // Water Temp
+  
+
+  // Pull Air Temp
+  
+
+  // Pull pH
+  
+
+  // Pull Water Level
+  
+}
+
 // Pushes values to update firebase
 void UpdateFirebase() {
   // Push Heater
@@ -97,6 +130,7 @@ void UpdateFirebase() {
   }
 
   // Push Water Temp
+  data.WaterTemp = WaterTemp;
   if (Firebase.setFloat(firebaseData, "/Sensors/WaterTemp", data.WaterTemp)) {
       Serial.println(firebaseData.dataPath() + " = " + data.WaterTemp);
     }
@@ -105,6 +139,7 @@ void UpdateFirebase() {
   }
 
   // Push Air Temp
+  data.AirTemp = AirTemp;
   if (Firebase.setFloat(firebaseData, "/Sensors/AirTemp", data.AirTemp)) {
       Serial.println(firebaseData.dataPath() + " = " + data.AirTemp);
     }
@@ -113,6 +148,7 @@ void UpdateFirebase() {
   }
 
   // Push pH
+  data.pH = pH;
   if (Firebase.setFloat(firebaseData, "/Sensors/pH", data.pH)) {
       Serial.println(firebaseData.dataPath() + " = " + data.pH);
     }
@@ -121,7 +157,7 @@ void UpdateFirebase() {
   }
 
   // Push Water Level
-  if (Firebase.setFloat(firebaseData, "/Sensors/WaterLevel", data.WaterLevel)) {
+  if (Firebase.setBool(firebaseData, "/Sensors/WaterLevel", data.WaterLevel)) {
       Serial.println(firebaseData.dataPath() + " = " + data.WaterLevel);
     }
   else {
@@ -135,12 +171,13 @@ void UpdateRelays() {
 
 void ReadSensors() {
   // Air Temp
-
+  AirTemp = AirTempSensor.readTemperature();
+  AirTemp = (AirTemp * 1.8) + 32; // Convert to F
 
   // Water Temp
-  sensors.requestTemperatures();
+  WaterTempSensor.requestTemperatures();
   delay(25);
-  data.WaterTemp = sensors.getTempFByIndex(0) + 2.1; // Offset comes from adjusting temp probe readings
+  WaterTemp = WaterTempSensor.getTempFByIndex(0) + 2.1; // Offset comes from adjusting temp probe readings
 
   // pH
 
@@ -148,15 +185,6 @@ void ReadSensors() {
   // Water Level
 
   
-}
-
-void KeypadInterrupt() {
-  Serial.println("INTERRUPT!");
-  char customKey = customKeypad.getKey();
-
-  if (customKey){
-    Serial.println(customKey);
-  }
 }
 
 void keypadEvent(KeypadEvent key) {
@@ -196,11 +224,14 @@ void setup() {
 
   customKeypad.addEventListener(keypadEvent);
   
-  sensors.begin();
+  WaterTempSensor.begin();
+  AirTempSensor.begin();
   
   while(!Serial) {
     ; // wait for serial connection
     }
+
+  Wire.begin();
 
   // -------------------------------------------------------------
   // Start Wifi & Connect to Firebase
@@ -233,15 +264,22 @@ void setup() {
   
 }
 
-
+int Update_Firebase_Counter = 30;
 void loop() {
 
   char key = customKeypad.getKey();
   if (change == true) getnum();
+
+  // -------------------------------------------------------------
+  // Write Data to Display
+  
+  
+  // -------------------------------------------------------------
   
   // -------------------------------------------------------------
   // Read sensor and firebase data and store into memory
 
+  GetFirebaseValues();
   ReadSensors(); // Read sensors and store their values
   
   // Data read in by this point
@@ -257,8 +295,13 @@ void loop() {
   // -------------------------------------------------------------
   // Upload updated data to firebase
 
-  UpdateFirebase(); // Push updated values to Firebase
+  if (Update_Firebase_Counter > 29) // If Update_Firebase_Counter gets to 30, push values to firebase (about 30 seconds)
+  {
+    UpdateFirebase(); // Push updated values to Firebase
+    Update_Firebase_Counter = 0;
+  }
 
   // -------------------------------------------------------------
   delay(500);
+  Update_Firebase_Counter++;
 }
