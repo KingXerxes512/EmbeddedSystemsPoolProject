@@ -65,6 +65,41 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 #define FIREBASE_HOST "es-pool-controller-default-rtdb.firebaseio.com"
 #define FIREBASE_AUTH "YXsdNJ9OFISN2ZwgUhIQxny6KDtDgdMdm9Ho6HWL"
 
+int Fall_Back = 0;
+int hours;
+int minutes;
+int seconds;
+int timeZoneOffset = -5*60*60; // time zone offset relative to GMT 
+
+void getTimeFromWifi() {
+  // Get the time
+  int time = WiFi.getTime() + timeZoneOffset;
+  seconds = time % 60; // Get seconds
+  time /= 60;
+  minutes = time % 60; // Get minutes
+  time /= 60;
+  hours = (time % 24) - Fall_Back; // Get hours
+  if (hours < 0 || hours > 24) {
+    hours = 0;
+    minutes = 0;
+    seconds = 0;
+  }
+}
+
+void printTime() {
+  // Print time
+  if (hours > 12) {
+    hours -=12;
+  }
+  Serial.print("Time: ");
+  Serial.print(hours);
+  Serial.print(":");
+  if (minutes < 10) {
+    Serial.print("0");
+  }
+  Serial.println(minutes);
+}
+
   OneWire WaterTempSense(WATER_SENS_PROBE_DATA);
   DallasTemperature WaterTempSensor(&WaterTempSense);
 
