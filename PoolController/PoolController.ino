@@ -357,15 +357,30 @@ void loop() {
   // -------------------------------------------------------------
   // Write Data to Display
 
+  String Pump_Running_String, Heater_Running_String;
+  if (Pump_Running == false) {
+      Pump_Running_String = "OFF";
+  }
+  else {
+      Pump_Running_String = "ON";
+  }
+  if (Heater_Running == false) {
+      Heater_Running_String = "OFF";
+  }
+  else {
+      Heater_Running_String = "ON";
+  }
+
   display.clearDisplay();
   display.setTextSize(1);
   display.setCursor(1,1);
-  display.print("Air Temp - ");
-  display.println(AirTemp);
-  display.print("Water Temp - ");
-  display.println(WaterTemp);
-  display.print("pH - ");
-  display.println(pH);
+  display.println("Sensors:");
+  display.print("Air Tem: "); display.println(AirTemp);
+  display.print("Water Temp: "); display.println(WaterTemp);
+  display.print("pH: "); display.println(pH);
+  display.println("Relays:");
+  display.print("Pump: "); display.println(Pump_Running_String);
+  display.print("Heater: "); display.println(Heater_Running_String);
   display.display();
   
   // -------------------------------------------------------------
