@@ -165,10 +165,16 @@ bool GetFirebaseValues() {
 	if (Firebase.getBool(firebaseData, "/Devices/Heater")) {
 		tempHeater = firebaseData.boolData();
 	}
+	else {
+		Serial.println("Error: " + firebaseData.errorReason());
+	}
 
 	// Pull Filter / Pump
 	if (Firebase.getBool(firebaseData, "/Devices/Pump")) {
 		tempPump = firebaseData.boolData();
+	}
+	else {
+		Serial.println("Error: " + firebaseData.errorReason());
 	}
 
 	if (tempPump != data.Pump_Running || tempHeater != data.Heater_Running) {
