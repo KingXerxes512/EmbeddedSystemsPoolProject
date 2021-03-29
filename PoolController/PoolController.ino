@@ -14,12 +14,12 @@ FirebaseData firebaseData;
 
 struct Data // struct to contain a copy of the database values
 {
-  bool Heater_Running = false;  // Relay 1
-  bool Pump_Running = false;    // Relay 2
+  bool Heater_Running = false;    // Relay 1
+  bool Pump_Running = true;       // Relay 2
   float AirTemp = 10000;          // Air Temp Probe
   float WaterTemp = 10000;        // Water Temp Probe
   float pH = 10000;               // pH Temp Probe
-  bool WaterLevel = false;       // Water Level Probe
+  bool WaterLevel = false;        // Water Level Probe
 };
 Data data;
 
@@ -28,7 +28,7 @@ float AirTemp = 10000;
 float WaterTemp = 10000;
 float pH = 10000;
 bool Heater_Running = false;
-bool Pump_Running = false;
+bool Pump_Running = true;
 bool WaterLevel = false;
 
 const byte ROWS = 4; 
@@ -64,16 +64,16 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 #define USE_LUKE_HOTSPOT 0 
 #define USE_OCguest_NETWORK 1
 #if USE_JOSIAH_HOTSPOT
-//#define WIFI_SSID "Josiah's S20+"
-//#define WIFI_PASS "7205858843"
+  #define WIFI_SSID "Josiah's S20+"
+  #define WIFI_PASS "7205858843"
 #endif
 #if USE_LUKE_HOTSPOT
-//#define WIFI_SSID "Luke's iPhone"
-//#define WIFI_PASS "mynamejeff"
+  #define WIFI_SSID "Luke's iPhone"
+  #define WIFI_PASS "shamballa"
 #endif
 #if USE_OCguest_NETWORK
-#define WIFI_SSID "OCguest"
-#define WIFI_PASS ""
+  #define WIFI_SSID "OCguest"
+  #define WIFI_PASS ""
 #endif
 
 #define FIREBASE_HOST "es-pool-controller-default-rtdb.firebaseio.com"
@@ -83,46 +83,58 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 #define SCREEN_ADDRESS 0x3C 
 #define OLED_RESET -1 // Reset pin # (-1 since sharing with Arduino Reset)
 
+#define TIMEZONEOFFSET -5
+
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 int Fall_Back = 0;
-int hours;
-int minutes;
-int seconds;
-int timeZoneOffset = -5*60*60; // time zone offset relative to GMT 
+int hrs;
+int mins;
+int secs;
+int timeZoneOffset = TIMEZONEOFFSET*60*60; // time zone offset relative to GMT 
 
 void getTimeFromWifi() {
   // Get the time
   int time = WiFi.getTime() + timeZoneOffset;
-  seconds = time % 60; // Get seconds
+  secs = time % 60; // Get seconds
   time /= 60;
-  minutes = time % 60; // Get minutes
+  mins = time % 60; // Get minutes
   time /= 60;
-  hours = (time % 24) - Fall_Back; // Get hours
-  if (hours < 0 || hours > 24) {
-    hours = 0;
-    minutes = 0;
-    seconds = 0;
+  hrs = (time % 24) - Fall_Back; // Get hours
+  if (hrs < 0 || hrs > 24) {
+      hrs = 0;
+      mins = 0;
+      secs = 0;
   }
 }
 
-void printTime() {
+String getTimeString() { // Calls the getTime function and manipulates the values to create a string in a nice format
+  getTimeFromWifi();
+  bool AMFlag = true;
+    String time = "Time: ";
   // Print time
-  if (hours > 12) {
-    hours -=12;
+  if (hrs > 12) {
+      hrs -=12;
+      AMFlag = false;
   }
-  Serial.print("Time: ");
-  Serial.print(hours);
-  Serial.print(":");
-  if (minutes < 10) {
-    Serial.print("0");
+  time = time + hrs;
+  time = time + ':';
+  if (mins < 10) {
+      time = time + '0';
   }
-  Serial.println(minutes);
+  time = time + mins;
+  if (AMFlag) {
+    time = time + " AM";
+  }
+  else {
+    time = time + " PM";
+  }
+  return time;
 }
 
+  // Initialization stuff
   OneWire WaterTempSense(WATER_SENS_PROBE_DATA);
   DallasTemperature WaterTempSensor(&WaterTempSense);
-
   DHT AirTempSensor(AIR_TEMP_PROBE_DATA, DHTTYPE);
 
 // functions to turn on or off the builtin LED
@@ -230,6 +242,7 @@ void UpdateFirebase() {
 
 void UpdateRelays() {
   // This function will set pins HIGH or LOW to turn relays on or off
+  
 }
 
 void ReadSensors() {
@@ -243,10 +256,10 @@ void ReadSensors() {
   WaterTemp = WaterTempSensor.getTempFByIndex(0); 
 
   // pH
-
+  
 
   // Water Level
-
+  
   
 }
 
@@ -268,6 +281,7 @@ void keypadEvent(KeypadEvent key) {
   }
 }
 
+// More keypad stuff
 void getnum() {
   char key = customKeypad.waitForKey();
   while (change == true) {
@@ -282,7 +296,8 @@ void getnum() {
   }
 }
 
-// START THE MACHINE
+
+////////////////////// START THE MACHINE
 void setup() {
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -374,6 +389,7 @@ void loop() {
   display.clearDisplay();
   display.setTextSize(1);
   display.setCursor(1,1);
+  display.println(getTimeString());
   display.println("Sensors:");
   display.print("Air Tem: "); display.println(AirTemp);
   display.print("Water Temp: "); display.println(WaterTemp);
