@@ -12,7 +12,7 @@
 
 FirebaseData firebaseData;
 
-struct Data // struct to contain a copy of the database values
+struct Data // struct to contain a copy of the firebase values
 {
 	bool Heater_Running = false;    // Relay 1
 	bool Pump_Running = false;       // Relay 2
@@ -24,12 +24,15 @@ struct Data // struct to contain a copy of the database values
 Data data;
 
 // Current Sensor Values - initialized to garbage values
-bool Heater_Running = false;
-bool Pump_Running = false;
-float AirTemp = 10000;
-float WaterTemp = 10000;
-float pH = 10000;
-bool WaterLevel = false;
+static bool Heater_Running = false;
+static bool Pump_Running = false;
+static float AirTemp = 10000;
+static float WaterTemp = 10000;
+static float pH = 10000;
+static bool WaterLevel = false;
+
+int Update_Firebase_Counter = 30;
+bool FirebaseChangeMade;
 
 const byte ROWS = 4;
 const byte COLS = 4;
@@ -43,7 +46,7 @@ char hexaKeys[ROWS][COLS] = {
 byte rowPins[COLS] = { 3, 4, 5, 6 };
 byte colPins[ROWS] = { 7, 8, 9, 10 };
 
-bool change = false;
+bool keypadEditMode = false;
 
 Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
@@ -59,6 +62,10 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 #define KEYPAD_C2 8
 #define KEYPAD_C3 9
 #define KEYPAD_C4 10
+#define pHSensorPin 17
+#define pHOFFSET -5.00
+#define HEATERPIN 20
+#define PUMPPIN 21
 
 #define USE_JOSIAH_HOTSPOT 0 
 #define USE_LUKE_HOTSPOT 0 
@@ -82,6 +89,7 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define SCREEN_ADDRESS 0x3C 
 #define OLED_RESET -1 // Reset pin # (-1 since sharing with Arduino Reset)
+#define BLUE WHITE
 
 #define TIMEZONEOFFSET -5
 
@@ -177,10 +185,13 @@ bool GetFirebaseValues() {
 		Serial.println("Error: " + firebaseData.errorReason());
 	}
 
-	if (tempPump != data.Pump_Running || tempHeater != data.Heater_Running) {
+	if (!FirebaseChangeMade && (tempPump != data.Pump_Running || tempHeater != data.Heater_Running)) {
 		Pump_Running = tempPump;
 		Heater_Running = tempHeater;
 		return true; // returns if a change was detected
+	}
+	else if (FirebaseChangeMade) {
+		return FirebaseChangeMade;
 	}
 	return false;
 }
@@ -256,9 +267,29 @@ void UpdateFirebase(bool ManualUpdate) {
 
 void UpdateRelays() {
 	// This function will set pins HIGH or LOW to turn relays on or off
+	if (data.Pump_Running == true) {
+		Pump_Running = true;
+		digitalWrite(PUMPPIN, HIGH);
+	}
+	else {
+		Pump_Running = false;
+		digitalWrite(PUMPPIN, LOW);
+	}
+	if (data.Heater_Running == true) {
+		Heater_Running = true;
+		digitalWrite(HEATERPIN, HIGH);
 
+	}
+	else {
+		Heater_Running = false;
+		digitalWrite(HEATERPIN, LOW);
+	}
 }
 
+const int LEN = 40;
+int pHArray[LEN] = { 0 };
+int pHArrayIDX = 0;
+static float voltage;
 void ReadSensors() {
 	// Air Temp
 	AirTemp = AirTempSensor.readTemperature();
@@ -270,11 +301,62 @@ void ReadSensors() {
 	WaterTemp = WaterTempSensor.getTempFByIndex(0);
 
 	// pH
-
+	for (int i = 0; i < 50; i++) {
+		pHArray[pHArrayIDX++] = analogRead(pHSensorPin);
+		if (pHArrayIDX == LEN) {
+			pHArrayIDX = 0;
+		}
+		voltage = averagearray(pHArray, LEN) * 5.0 / 1024;
+		pH = 3.5 * voltage + pHOFFSET;
+		delay(10);
+	}
 
 	// Water Level
 
 
+}
+
+double averagearray(int* arr, int number) {
+	int i;
+	int max, min;
+	double avg;
+	long amount = 0;
+	if (number <= 0) {
+		Serial.println("Error number for the array to avraging!/n");
+		return 0;
+	}
+	if (number < 5) {   //less than 5, calculated directly statistics
+		for (i = 0; i < number; i++) {
+			amount += arr[i];
+		}
+		avg = amount / number;
+		return avg;
+	}
+	else {
+		if (arr[0] < arr[1]) {
+			min = arr[0]; max = arr[1];
+		}
+		else {
+			min = arr[1]; max = arr[0];
+		}
+		for (i = 2; i < number; i++) {
+			if (arr[i] < min) {
+				amount += min;        //arr<min
+				min = arr[i];
+			}
+			else {
+				if (arr[i] > max) {
+					amount += max;    //arr>max
+					max = arr[i];
+				}
+				else {
+					amount += arr[i]; //min<=arr<=max
+				}
+			}//if
+		}//for
+		avg = (double)amount / (number - 2);
+	}//if
+	return avg;
 }
 
 // Keypad stuff
@@ -284,30 +366,68 @@ void keypadEvent(KeypadEvent key) {
 		if (key == '*') {
 			Serial.println("pressed...");
 
-			if (change == false) {
-				change = true;
-			}
-			else {
-				change = false;
-			}
+			keypadEditMode = !keypadEditMode;
 		}
 		break;
 	}
 }
 
 // More keypad stuff
-void getnum() {
-	char key = customKeypad.waitForKey();
-	while (change == true) {
-		if (key != '#') {
-			Serial.print(key);
+void keypadEdit() {
+	int selectedRow = 1; // Row that the user is editing
+	while (keypadEditMode) {
+		String Pump_Running_String, Heater_Running_String;
+		if (!Pump_Running) {
+			Pump_Running_String = "OFF";
 		}
 		else {
-			Serial.println();
+			Pump_Running_String = "ON";
 		}
+		if (!Heater_Running) {
+			Heater_Running_String = "OFF";
+		}
+		else {
+			Heater_Running_String = "ON";
+		}
+		const int ROWMAX = 2;
+		int row = 1; // Row to be written to currently
+		display.clearDisplay();
+		display.setTextSize(1);
+		display.setTextColor(BLUE);
+		display.setCursor(1, 1);
+		display.println("Edit Mode:");
+		display.println("Relays:");
+		if (selectedRow == row) {
+			display.print("--> ");
+		}
+		display.print("Pump: "); display.println(Pump_Running_String);
+		row += 1;
+		if (selectedRow == row) {
+			display.print("--> ");
+		}
+		display.print("Heater: "); display.println(Heater_Running_String);
+		display.display();
 
-		key = customKeypad.waitForKey();
+		char key = customKeypad.waitForKey();
+		if (key == '#') {
+			FirebaseChangeMade = true;
+			switch (selectedRow) {
+			case 1:
+				Pump_Running = !Pump_Running;
+				break;
+			case 2:
+				Heater_Running = !Heater_Running;
+				break;
+			}
+		}
+		if (key == 'A') {
+			selectedRow = 1;
+		}
+		if (key == 'B') {
+			selectedRow = 2;
+		}
 	}
+	display.clearDisplay();
 }
 
 
@@ -321,9 +441,9 @@ void setup() {
 	WaterTempSensor.begin();
 	AirTempSensor.begin();
 
-	while (!Serial) {
-		; // wait for serial connection
-	}
+	//while (!Serial) {
+	//	; // wait for serial connection
+	//}
 
 	Wire.begin();
 
@@ -335,12 +455,12 @@ void setup() {
 	display.clearDisplay();
 	display.clearDisplay();
 	display.display();
-	display.drawPixel(0, 0, WHITE);
-	display.drawPixel(127, 0, WHITE);
-	display.drawPixel(0, 63, WHITE);
-	display.drawPixel(127, 63, WHITE);
+	display.drawPixel(0, 0, BLUE);
+	display.drawPixel(127, 0, BLUE);
+	display.drawPixel(0, 63, BLUE);
+	display.drawPixel(127, 63, BLUE);
 	display.setTextSize(1);
-	display.setTextColor(WHITE);
+	display.setTextColor(BLUE);
 	display.setCursor(40, 25);
 	display.print("ONLINE");
 	display.display();
@@ -377,23 +497,24 @@ void setup() {
 
 }
 
-int Update_Firebase_Counter = 30;
 void loop() {
 
 	char key = customKeypad.getKey();
-	if (change == true) getnum();
+	if (keypadEditMode) {
+		keypadEdit();
+	}
 
 	// -------------------------------------------------------------
 	// Write Data to Display
 
 	String Pump_Running_String, Heater_Running_String;
-	if (Pump_Running == false) {
+	if (!Pump_Running) {
 		Pump_Running_String = "OFF";
 	}
 	else {
 		Pump_Running_String = "ON";
 	}
-	if (Heater_Running == false) {
+	if (!Heater_Running) {
 		Heater_Running_String = "OFF";
 	}
 	else {
@@ -418,17 +539,10 @@ void loop() {
 	// -------------------------------------------------------------
 	// Read sensor and firebase data and store into memory
 
-	bool FirebaseChangeMade = GetFirebaseValues();
+	FirebaseChangeMade = GetFirebaseValues();
 	ReadSensors(); // Read sensors and store their values
 
 	// Data read in by this point
-	// -------------------------------------------------------------
-
-	// -------------------------------------------------------------
-	// Make appropriate relay modifications
-
-	UpdateRelays(); // Turn Relays on or off based on the data struct's values
-
 	// -------------------------------------------------------------
 
 	// -------------------------------------------------------------
@@ -441,6 +555,14 @@ void loop() {
 	}
 
 	// -------------------------------------------------------------
+
+	// -------------------------------------------------------------
+	// Make appropriate relay modifications
+
+	UpdateRelays(); // Turn Relays on or off based on the data struct's values
+
+	// -------------------------------------------------------------
+
 	delay(500);
 	Update_Firebase_Counter++;
 }
