@@ -28,7 +28,7 @@ static bool Heater_Running = false;
 static bool Pump_Running = false;
 static float AirTemp = 10000;
 static float WaterTemp = 10000;
-static float pH = 10000;
+static float pH = 0.00;
 static bool WaterLevel = false;
 
 int Update_Firebase_Counter = 30;
@@ -53,7 +53,7 @@ bool keypadEditMode = false;
 Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
 // PIN DEFINITIONS
-#define WATER_SENS_PROBE_DATA 2
+#define WATER_SENS_PROBE_DATA 2   // Temp
 #define AIR_TEMP_PROBE_DATA 12
 #define DHTTYPE DHT22   // DHT22
 #define KEYPAD_R1 3
@@ -68,6 +68,7 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 #define pHOFFSET -5.00
 #define HEATERPIN 20
 #define PUMPPIN 21
+#define WATERLVL 16
 
 #define USE_JOSIAH_HOTSPOT 0 
 #define USE_LUKE_HOTSPOT 0 
@@ -102,7 +103,6 @@ int hrs;
 int mins;
 int secs;
 int timeZoneOffset = TIMEZONEOFFSET * 60 * 60; // time zone offset relative to GMT 
-
 void getTimeFromWifi() {
 	// Get the time
 	int time = WiFi.getTime() + timeZoneOffset;
@@ -321,7 +321,7 @@ void ReadSensors() {
 	}
 
 	// Water Level
-
+	WaterLevel = digitalRead(WATERLVL);
 
 }
 
@@ -443,6 +443,7 @@ void keypadEdit() {
 void setup() {
 
 	pinMode(LED_BUILTIN, OUTPUT);
+	pinMode(WATERLVL, INPUT);
 
 	customKeypad.addEventListener(keypadEvent);
 
@@ -515,7 +516,7 @@ void loop() {
 	// -------------------------------------------------------------
 	// Write Data to Display
 
-	String Pump_Running_String, Heater_Running_String;
+	String Pump_Running_String, Heater_Running_String, Water_Level_String;
 	if (!Pump_Running) {
 		Pump_Running_String = "OFF";
 	}
@@ -528,6 +529,12 @@ void loop() {
 	else {
 		Heater_Running_String = "ON";
 	}
+	if (!WaterLevel) {
+		Water_Level_String = "OFF";
+	}
+	else {
+		Water_Level_String = "ON";
+	}
 
 	display.clearDisplay();
 	display.setTextSize(1);
@@ -536,7 +543,7 @@ void loop() {
 	display.println("Sensors:");
 	display.print("Air Tem: "); display.println(AirTemp);
 	display.print("Water Temp: "); display.println(WaterTemp);
-	display.print("pH: "); display.println(pH);
+	display.print("pH: "); display.print(pH); display.print(" Level: "); display.println(Water_Level_String);
 	display.println("Relays:");
 	display.print("Pump: "); display.println(Pump_Running_String);
 	display.print("Heater: "); display.println(Heater_Running_String);
@@ -571,6 +578,8 @@ void loop() {
 
 	// -------------------------------------------------------------
 
-	delay(1000);
+	delay(500);
 	Update_Firebase_Counter++;
+
+	// With no manual updates, Firebase will be automatically updated every 41 seconds approximately.
 }
