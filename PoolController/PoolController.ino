@@ -21,7 +21,7 @@ struct Data // struct to contain a copy of the firebase values
 	float pH = 10000;               // pH Temp Probe
 	bool WaterLevel = false;        // Water Level Probe
 };
-Data data;
+Data localFireData;
 
 // Current Sensor Values - initialized to garbage values
 static bool Heater_Running = false;
@@ -32,7 +32,9 @@ static float pH = 10000;
 static bool WaterLevel = false;
 
 int Update_Firebase_Counter = 30;
+bool ChangeMade;
 bool FirebaseChangeMade;
+bool LocalChangeMade;
 
 const byte ROWS = 4;
 const byte COLS = 4;
@@ -185,33 +187,40 @@ bool GetFirebaseValues() {
 		Serial.println("Error: " + firebaseData.errorReason());
 	}
 
-	if (!FirebaseChangeMade && (tempPump != data.Pump_Running || tempHeater != data.Heater_Running)) {
+	if (LocalChangeMade) {
+		return true;
+	}
+	if (tempPump != localFireData.Pump_Running || tempHeater != localFireData.Heater_Running) {
+		FirebaseChangeMade = true;
 		Pump_Running = tempPump;
 		Heater_Running = tempHeater;
 		return true; // returns if a change was detected
-	}
-	else if (FirebaseChangeMade) {
-		return FirebaseChangeMade;
 	}
 	return false;
 }
 
 // Pushes values to update firebase
-void UpdateFirebase(bool ManualUpdate) {
+void UpdateFirebase() {
 	// Set values
-	if (ManualUpdate) {
-		data.Heater_Running = Heater_Running;
-		data.Pump_Running = Pump_Running;
+	if (LocalChangeMade) {
+		localFireData.Heater_Running = Heater_Running;
+		localFireData.Pump_Running = Pump_Running;
+		LocalChangeMade = false;
 	}
-	data.WaterTemp = WaterTemp;
-	data.AirTemp = AirTemp;
-	data.pH = pH;
-	WaterLevel = data.WaterLevel;
+	else if (FirebaseChangeMade) {
+		localFireData.Heater_Running = Heater_Running;
+		localFireData.Pump_Running = Pump_Running;
+		FirebaseChangeMade = false;
+	}
+	localFireData.WaterTemp = WaterTemp;
+	localFireData.AirTemp = AirTemp;
+	localFireData.pH = pH;
+	localFireData.WaterLevel = WaterLevel;
 
 	Serial.println("========================================");
 	// Push Heater
-	if (Firebase.setBool(firebaseData, "/Devices/Heater", data.Heater_Running)) {
-		Serial.println(firebaseData.dataPath() + " = " + data.Heater_Running);
+	if (Firebase.setBool(firebaseData, "/Devices/Heater", localFireData.Heater_Running)) {
+		Serial.println(firebaseData.dataPath() + " = " + localFireData.Heater_Running);
 	}
 	else {
 		Serial.println("Error with: Heater");
@@ -219,8 +228,8 @@ void UpdateFirebase(bool ManualUpdate) {
 	}
 
 	// Push Filter / Pump
-	if (Firebase.setBool(firebaseData, "/Devices/Pump", data.Pump_Running)) {
-		Serial.println(firebaseData.dataPath() + " = " + data.Pump_Running);
+	if (Firebase.setBool(firebaseData, "/Devices/Pump", localFireData.Pump_Running)) {
+		Serial.println(firebaseData.dataPath() + " = " + localFireData.Pump_Running);
 	}
 	else {
 		Serial.println("Error with: Pump / Filter");
@@ -228,8 +237,8 @@ void UpdateFirebase(bool ManualUpdate) {
 	}
 
 	// Push Water Temp
-	if (Firebase.setFloat(firebaseData, "/Sensors/WaterTemp", data.WaterTemp)) {
-		Serial.println(firebaseData.dataPath() + " = " + data.WaterTemp);
+	if (Firebase.setFloat(firebaseData, "/Sensors/WaterTemp", localFireData.WaterTemp)) {
+		Serial.println(firebaseData.dataPath() + " = " + localFireData.WaterTemp);
 	}
 	else {
 		Serial.println("Error with: Water Temp");
@@ -237,8 +246,8 @@ void UpdateFirebase(bool ManualUpdate) {
 	}
 
 	// Push Air Temp
-	if (Firebase.setFloat(firebaseData, "/Sensors/AirTemp", data.AirTemp)) {
-		Serial.println(firebaseData.dataPath() + " = " + data.AirTemp);
+	if (Firebase.setFloat(firebaseData, "/Sensors/AirTemp", localFireData.AirTemp)) {
+		Serial.println(firebaseData.dataPath() + " = " + localFireData.AirTemp);
 	}
 	else {
 		Serial.println("Error with: Air Temp");
@@ -246,8 +255,8 @@ void UpdateFirebase(bool ManualUpdate) {
 	}
 
 	// Push pH
-	if (Firebase.setFloat(firebaseData, "/Sensors/pH", data.pH)) {
-		Serial.println(firebaseData.dataPath() + " = " + data.pH);
+	if (Firebase.setFloat(firebaseData, "/Sensors/pH", localFireData.pH)) {
+		Serial.println(firebaseData.dataPath() + " = " + localFireData.pH);
 	}
 	else {
 		Serial.println("Error with: pH");
@@ -255,8 +264,8 @@ void UpdateFirebase(bool ManualUpdate) {
 	}
 
 	// Push Water Level
-	if (Firebase.setBool(firebaseData, "/Sensors/WaterLevel", data.WaterLevel)) {
-		Serial.println(firebaseData.dataPath() + " = " + data.WaterLevel);
+	if (Firebase.setBool(firebaseData, "/Sensors/WaterLevel", localFireData.WaterLevel)) {
+		Serial.println(firebaseData.dataPath() + " = " + localFireData.WaterLevel);
 	}
 	else {
 		Serial.println("Error with: Water Level");
@@ -267,7 +276,7 @@ void UpdateFirebase(bool ManualUpdate) {
 
 void UpdateRelays() {
 	// This function will set pins HIGH or LOW to turn relays on or off
-	if (data.Pump_Running == true) {
+	if (localFireData.Pump_Running == true) {
 		Pump_Running = true;
 		digitalWrite(PUMPPIN, HIGH);
 	}
@@ -275,7 +284,7 @@ void UpdateRelays() {
 		Pump_Running = false;
 		digitalWrite(PUMPPIN, LOW);
 	}
-	if (data.Heater_Running == true) {
+	if (localFireData.Heater_Running == true) {
 		Heater_Running = true;
 		digitalWrite(HEATERPIN, HIGH);
 
@@ -329,7 +338,7 @@ double averagearray(int* arr, int number) {
 		for (i = 0; i < number; i++) {
 			amount += arr[i];
 		}
-		avg = amount / number;
+		avg = float(amount) / number;
 		return avg;
 	}
 	else {
@@ -410,7 +419,7 @@ void keypadEdit() {
 
 		char key = customKeypad.waitForKey();
 		if (key == '#') {
-			FirebaseChangeMade = true;
+			LocalChangeMade = true;
 			switch (selectedRow) {
 			case 1:
 				Pump_Running = !Pump_Running;
@@ -429,7 +438,6 @@ void keypadEdit() {
 	}
 	display.clearDisplay();
 }
-
 
 ////////////////////// START THE MACHINE
 void setup() {
@@ -539,7 +547,7 @@ void loop() {
 	// -------------------------------------------------------------
 	// Read sensor and firebase data and store into memory
 
-	FirebaseChangeMade = GetFirebaseValues();
+	ChangeMade = GetFirebaseValues();
 	ReadSensors(); // Read sensors and store their values
 
 	// Data read in by this point
@@ -548,9 +556,9 @@ void loop() {
 	// -------------------------------------------------------------
 	// Upload updated data to firebase
 
-	if (Update_Firebase_Counter > 29 || FirebaseChangeMade) // If Update_Firebase_Counter gets to 30, push values to firebase (about 30 seconds)
+	if (Update_Firebase_Counter > 20 || ChangeMade) // If Update_Firebase_Counter gets to 30, push values to firebase (about 30 seconds)
 	{
-		UpdateFirebase(FirebaseChangeMade); // Push updated values to Firebase
+		UpdateFirebase(); // Push updated values to Firebase
 		Update_Firebase_Counter = 0;
 	}
 
@@ -563,6 +571,6 @@ void loop() {
 
 	// -------------------------------------------------------------
 
-	delay(500);
+	delay(1000);
 	Update_Firebase_Counter++;
 }
