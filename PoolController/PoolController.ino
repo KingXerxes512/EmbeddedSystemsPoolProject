@@ -14,16 +14,19 @@ FirebaseData firebaseData;
 
 struct Data // struct to contain a copy of the firebase values
 {
+  bool Mode = true;               // Pool Operates in auto or manual mode
 	bool Heater_Running = false;    // Relay 1
-	bool Pump_Running = false;       // Relay 2
+	bool Pump_Running = false;      // Relay 2
 	float AirTemp = 10000;          // Air Temp Probe
 	float WaterTemp = 10000;        // Water Temp Probe
 	float pH = 10000;               // pH Temp Probe
 	bool WaterLevel = false;        // Water Level Probe
+  String Schedule[7] = {""};      // Array of strings holding the schedules for each day of the week
 };
 Data localFireData;
 
-// Current Sensor Values - initialized to garbage values
+// Current Sensor Values - initialized to throw away values
+static bool Mode = true;
 static bool Heater_Running = false;
 static bool Pump_Running = false;
 static float AirTemp = 10000;
@@ -171,6 +174,7 @@ void SetupWifiConnection() {
 bool GetFirebaseValues() {
 	bool tempHeater;
 	bool tempPump;
+  bool tempMode;
 	// Pull Heater
 	if (Firebase.getBool(firebaseData, "/Devices/Heater")) {
 		tempHeater = firebaseData.boolData();
@@ -187,13 +191,19 @@ bool GetFirebaseValues() {
 		Serial.println("Error: " + firebaseData.errorReason());
 	}
 
+  // Mode
+  if (Firebase.getBool(firebaseData, "/Auto") {
+    tempMode = firebaseData.boolData();
+  }
+
 	if (LocalChangeMade) {
 		return true;
 	}
-	if (tempPump != localFireData.Pump_Running || tempHeater != localFireData.Heater_Running) {
+	if (tempPump != localFireData.Pump_Running || tempHeater != localFireData.Heater_Running || tempMode != localFireData.Mode) {
 		FirebaseChangeMade = true;
 		Pump_Running = tempPump;
 		Heater_Running = tempHeater;
+    Mode = tempMode;
 		return true; // returns if a change was detected
 	}
 	return false;
