@@ -1,1 +1,1 @@
-This is Luke Rodman's branch in the Embedded System's Pool Controller Project
+If you would like to use this code for your own Arduino project, grab the .ino file under pool controller and edit from there.
