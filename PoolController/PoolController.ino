@@ -14,14 +14,14 @@ FirebaseData firebaseData;
 
 struct Data // struct to contain a copy of the firebase values
 {
-  bool Mode = true;               // Pool Operates in auto or manual mode
+	bool Mode = true;               // Pool Operates in auto or manual mode
 	bool Heater_Running = false;    // Relay 1
 	bool Pump_Running = false;      // Relay 2
 	float AirTemp = 10000;          // Air Temp Probe
 	float WaterTemp = 10000;        // Water Temp Probe
 	float pH = 10000;               // pH Temp Probe
 	bool WaterLevel = false;        // Water Level Probe
-  String Schedule[7] = {""};      // Array of strings holding the schedules for each day of the week
+	String Schedule[7] = { "" };      // Array of strings holding the schedules for each day of the week
 };
 Data localFireData;
 
@@ -106,6 +106,35 @@ int hrs;
 int mins;
 int secs;
 int timeZoneOffset = TIMEZONEOFFSET * 60 * 60; // time zone offset relative to GMT 
+
+String getDay() {
+	int time = WiFi.getTime() + timeZoneOffset;
+	time = (time / 86400) % 7;
+
+	switch (time) {
+	case 0:
+		return "Thursday";
+		break;
+	case 1:
+		return "Friday";
+		break;
+	case 2:
+		return "Saturday";
+		break;
+	case 3:
+		return "Sunday";
+		break;
+	case 4:
+return "Monday";
+break;
+	case 5:
+		return "Tuesday";
+		break;
+	case 6:
+		return "Wednesday";
+		break;
+	}
+}
 void getTimeFromWifi() {
 	// Get the time
 	int time = WiFi.getTime() + timeZoneOffset;
@@ -124,18 +153,19 @@ void getTimeFromWifi() {
 String getTimeString() { // Calls the getTime function and manipulates the values to create a string in a nice format
 	getTimeFromWifi();
 	bool AMFlag = true;
+	int tempHrs = hrs, tempMins = mins;
 	String time = "Time: ";
 	// Print time
-	if (hrs > 12) {
-		hrs -= 12;
+	if (tempHrs > 12) {
+		tempHrs -= 12;
 		AMFlag = false;
 	}
-	time = time + hrs;
+	time = time + tempHrs;
 	time = time + ':';
-	if (mins < 10) {
+	if (tempMins < 10) {
 		time = time + '0';
 	}
-	time = time + mins;
+	time = time + tempMins;
 	if (AMFlag) {
 		time = time + " AM";
 	}
@@ -171,10 +201,25 @@ void SetupWifiConnection() {
 	}
 }
 
+bool CheckSchedule(String Schedule) {
+	getTimeFromWifi();
+	int tempLHrs = (String(Schedule[0]) + String(Schedule[1])).toInt();
+	int tempHHrs = (String(Schedule[6]) + String(Schedule[7])).toInt();
+	int tempLMins = (String(Schedule[3]) + String(Schedule[4])).toInt();
+	int tempHMins = (String(Schedule[9]) + String(Schedule[10])).toInt();
+	if (hrs <= tempHHrs && hrs >= tempLHrs && mins <= tempHMins && mins >= tempLMins) {
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
 bool GetFirebaseValues() {
 	bool tempHeater;
 	bool tempPump;
-  bool tempMode;
+	bool tempMode;
+	String tempSchedule[7];
 	// Pull Heater
 	if (Firebase.getBool(firebaseData, "/Devices/Heater")) {
 		tempHeater = firebaseData.boolData();
@@ -191,19 +236,81 @@ bool GetFirebaseValues() {
 		Serial.println("Error: " + firebaseData.errorReason());
 	}
 
-  // Mode
-  if (Firebase.getBool(firebaseData, "/Auto") {
-    tempMode = firebaseData.boolData();
-  }
+	// Mode
+	if (Firebase.getBool(firebaseData, "/Auto")) {
+		tempMode = firebaseData.boolData();
+	}
+
+	// Schedule
+	if (Firebase.getString(firebaseData, "/Schedule/Monday")) {
+		tempSchedule[0] = firebaseData.stringData();
+	}
+	if (Firebase.getString(firebaseData, "/Schedule/Tuesday")) {
+		tempSchedule[1] = firebaseData.stringData();
+	}
+	if (Firebase.getString(firebaseData, "/Schedule/Wednesday")) {
+		tempSchedule[2] = firebaseData.stringData();
+	}
+	if (Firebase.getString(firebaseData, "/Schedule/Thursday")) {
+		tempSchedule[3] = firebaseData.stringData();
+	}
+	if (Firebase.getString(firebaseData, "/Schedule/Friday")) {
+		tempSchedule[4] = firebaseData.stringData();
+	}
+	if (Firebase.getString(firebaseData, "/Schedule/Saturday")) {
+		tempSchedule[5] = firebaseData.stringData();
+	}
+	if (Firebase.getString(firebaseData, "/Schedule/Sunday")) {
+		tempSchedule[6] = firebaseData.stringData();
+	}
+
+	if (Mode) { // Mode is in auto
+		String Day = getDay();
+		String Schedule;
+		if (Day.equals("Monday")) {
+			Schedule = tempSchedule[0];
+		}
+		else if (Day.equals("Tuesday")) {
+			Schedule = tempSchedule[1];
+		}
+		else if (Day.equals("Wednesday")) {
+			Schedule = tempSchedule[2];
+		}
+		else if (Day.equals("Thursday")) {
+			Schedule = tempSchedule[3];
+		}
+		else if (Day.equals("Friday")) {
+			Schedule = tempSchedule[4];
+		}
+		else if (Day.equals("Saturday")) {
+			Schedule = tempSchedule[5];
+		}
+		else {
+			Schedule = tempSchedule[6];
+		}
+		tempPump = CheckSchedule(Schedule);
+	}
+
+	bool ScheduleChanged = false;
+	for (int n = 0; n < 7; n++) {
+		if (tempSchedule[n].equals(localFireData.Schedule[n])) {
+		}
+		else {
+			ScheduleChanged = true;
+		}
+	}
 
 	if (LocalChangeMade) {
 		return true;
 	}
-	if (tempPump != localFireData.Pump_Running || tempHeater != localFireData.Heater_Running || tempMode != localFireData.Mode) {
+	if (tempPump != localFireData.Pump_Running || tempHeater != localFireData.Heater_Running || tempMode != localFireData.Mode || ScheduleChanged) {
 		FirebaseChangeMade = true;
 		Pump_Running = tempPump;
 		Heater_Running = tempHeater;
-    Mode = tempMode;
+		Mode = tempMode;
+		for (int n = 0; n < 7; n++) {
+			localFireData.Schedule[n] = tempSchedule[n];
+		}
 		return true; // returns if a change was detected
 	}
 	return false;
@@ -573,7 +680,7 @@ void loop() {
 	// -------------------------------------------------------------
 	// Upload updated data to firebase
 
-	if (Update_Firebase_Counter > 20 || ChangeMade) // If Update_Firebase_Counter gets to 30, push values to firebase (about 30 seconds)
+	if (Update_Firebase_Counter > 20 || ChangeMade) // If Update_Firebase_Counter gets to 20, push values to firebase (about 40 seconds)
 	{
 		UpdateFirebase(); // Push updated values to Firebase
 		Update_Firebase_Counter = 0;
