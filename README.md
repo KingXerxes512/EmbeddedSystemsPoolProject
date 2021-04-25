@@ -1,1 +1,1 @@
-You have cloned the master branch of the pool code repository!
+This is Luke Rodman's branch in the Embedded System's Pool Controller Project
